@@ -27,11 +27,23 @@ export class RedditClient {
   private reddit: Snoowrap;
 
   constructor() {
-    this.reddit = new Snoowrap({
-      userAgent: config.reddit.userAgent,
-      clientId: config.reddit.clientId,
-      clientSecret: config.reddit.clientSecret,
-    });
+    try {
+      // Try username/password authentication for script apps
+      this.reddit = new Snoowrap({
+        userAgent: config.reddit.userAgent,
+        clientId: config.reddit.clientId,
+        clientSecret: config.reddit.clientSecret,
+        username: config.reddit.username,
+        password: config.reddit.password,
+      });
+    } catch (error) {
+      console.warn('Username/password auth failed, this might be due to app type. Error:', error);
+      // Fallback: try without credentials (limited functionality)
+      throw new Error(
+        'Reddit authentication failed. Please ensure your Reddit app is configured as a "script" app type. ' +
+        'Go to https://www.reddit.com/prefs/apps and change your app type to "script", or create a new script app.'
+      );
+    }
   }
 
   /**

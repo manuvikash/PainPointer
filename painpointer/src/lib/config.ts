@@ -3,6 +3,8 @@ export const config = {
     clientId: process.env.REDDIT_CLIENT_ID!,
     clientSecret: process.env.REDDIT_CLIENT_SECRET!,
     userAgent: process.env.REDDIT_USER_AGENT!,
+    username: process.env.REDDIT_USERNAME!,
+    password: process.env.REDDIT_PASSWORD!,
   },
   gemini: {
     apiKey: process.env.GEMINI_API_KEY!,
@@ -20,6 +22,8 @@ export const validateConfig = () => {
   if (!config.reddit.clientId) missing.push('REDDIT_CLIENT_ID');
   if (!config.reddit.clientSecret) missing.push('REDDIT_CLIENT_SECRET');
   if (!config.reddit.userAgent) missing.push('REDDIT_USER_AGENT');
+  if (!config.reddit.username) missing.push('REDDIT_USERNAME');
+  if (!config.reddit.password) missing.push('REDDIT_PASSWORD');
   if (!config.gemini.apiKey) missing.push('GEMINI_API_KEY');
   
   if (missing.length > 0) {
