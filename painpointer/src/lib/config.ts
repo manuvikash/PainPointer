@@ -10,8 +10,8 @@ export const config = {
     apiKey: process.env.GEMINI_API_KEY!,
   },
   app: {
-    maxPosts: 50, // Maximum posts to analyze per subreddit
-    maxSubreddits: 5, // Maximum subreddits to search
+    maxPosts: 300, // Maximum posts to collect from all searches combined
+    maxSubreddits: 8, // Maximum subreddits to search
     maxComments: 20, // Maximum comments per post to analyze
   },
 };

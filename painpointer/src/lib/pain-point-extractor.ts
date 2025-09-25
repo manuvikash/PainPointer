@@ -168,6 +168,8 @@ export class PainPointExtractor {
   }
 
   /**
+  import { GoogleGenerativeAI } from '@google/generative-ai';
+  import { config } from './config';
    * Filter pain points by minimum engagement threshold
    */
   static filterByEngagement(painPoints: PainPoint[], minScore: number = 5): PainPoint[] {
@@ -185,5 +187,67 @@ export class PainPointExtractor {
       groups[point.subreddit].push(point);
       return groups;
     }, {} as Record<string, PainPoint[]>);
+  }
+
+  /**
+   * AI-powered relevance filter for pain points
+   * Only keeps pain points that are actually about the search term
+   */
+  static async aiFilterRelevantPainPoints(painPoints: PainPoint[], searchTerm: string): Promise<PainPoint[]> {
+    if (!painPoints.length) return [];
+    // Dynamically import to avoid issues in environments without the package
+    const { GoogleGenerativeAI } = await import('@google/generative-ai');
+    const { config } = await import('./config');
+    const genAI = new GoogleGenerativeAI(config.gemini.apiKey);
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+
+    // Batch up to 10 pain points per prompt for efficiency
+    const batchSize = 10;
+    const batches: PainPoint[][] = [];
+    for (let i = 0; i < painPoints.length; i += batchSize) {
+      batches.push(painPoints.slice(i, i + batchSize));
+    }
+
+    const relevantPainPoints: PainPoint[] = [];
+
+    for (const batch of batches) {
+      const prompt = `You are an expert at identifying product complaints. For each Reddit post/comment below, answer:
+1. Is this complaint actually about the product/topic "${searchTerm}"? (yes/no)
+2. If yes, extract or summarize the pain point in 1-2 sentences.
+3. If no, return "irrelevant".
+
+Return a JSON array of objects like:
+[{ "relevant": true/false, "pain_point": "..." }]
+
+Posts:
+${batch.map((p, idx) => `[${idx+1}] ${p.content}`).join('\n')}
+`;
+
+      try {
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        let text = response.text().trim();
+        // Remove code block if present
+        if (text.startsWith('```json')) {
+          text = text.replace(/```json|```/g, '').trim();
+        } else if (text.startsWith('```')) {
+          text = text.replace(/```/g, '').trim();
+        }
+        const aiResults = JSON.parse(text);
+        for (let i = 0; i < aiResults.length; i++) {
+          if (aiResults[i].relevant === true) {
+            relevantPainPoints.push({
+              ...batch[i],
+              content: aiResults[i].pain_point || batch[i].content
+            });
+          }
+        }
+      } catch (error) {
+        console.error('AI relevance filter failed, falling back to keyword filter for this batch:', error);
+        // Fallback: keep all batch pain points
+        relevantPainPoints.push(...batch);
+      }
+    }
+    return relevantPainPoints;
   }
 }

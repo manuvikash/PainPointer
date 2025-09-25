@@ -3,13 +3,16 @@ import { RedditClient } from '@/lib/reddit-client';
 import { PainPointExtractor } from '@/lib/pain-point-extractor';
 import { GeminiAnalyzer } from '@/lib/gemini-analyzer';
 import { validateConfig } from '@/lib/config';
+import { progressTracker } from '@/lib/progress-tracker';
 
 export async function POST(request: NextRequest) {
+  let analysisId: string;
+  
   try {
     // Validate environment configuration
     validateConfig();
 
-    const { searchTerm } = await request.json();
+    const { searchTerm, analysisId: providedAnalysisId } = await request.json();
 
     if (!searchTerm || typeof searchTerm !== 'string') {
       return NextResponse.json(
@@ -18,17 +21,29 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Use provided analysis ID or generate one
+    analysisId = providedAnalysisId || (Date.now().toString() + Math.random().toString(36).substring(2));
+
     // Initialize services
+    progressTracker.updateProgress(analysisId, 'setup', 'Initializing Reddit and AI services...', 5);
     const redditClient = new RedditClient();
     const geminiAnalyzer = new GeminiAnalyzer();
 
     // Step 1: Scrape Reddit for posts
+    progressTracker.updateProgress(analysisId, 'searching', 'Launching comprehensive Reddit search...', 10);
     console.log(`Starting analysis for: ${searchTerm}`);
+    
     const posts = await redditClient.getPostsWithComments(searchTerm);
     console.log(`Found ${posts.length} posts`);
+    
+    progressTracker.updateProgress(analysisId, 'searching', `Found ${posts.length} posts across Reddit`, 35, 
+      posts.length > 100 ? 'Excellent data coverage!' : posts.length > 50 ? 'Good data coverage' : 'Limited data found');
 
     if (posts.length === 0) {
+      progressTracker.updateProgress(analysisId, 'complete', 'No posts found for analysis', 100);
+      setTimeout(() => progressTracker.cleanup(analysisId), 30000);
       return NextResponse.json({
+        analysisId,
         categories: [],
         totalPainPoints: 0,
         searchTerm,
@@ -38,34 +53,59 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Step 2: Extract pain points
-    const painPoints = PainPointExtractor.extractPainPoints(posts);
-    console.log(`Extracted ${painPoints.length} pain points`);
+
+    // Step 2: Extract pain points (keyword/pattern)
+    progressTracker.updateProgress(analysisId, 'extracting', 'Extracting pain points from posts...', 50);
+    const initialPainPoints = PainPointExtractor.extractPainPoints(posts);
+    console.log(`Extracted ${initialPainPoints.length} candidate pain points`);
+
+    // Step 2b: AI relevance filtering
+    progressTracker.updateProgress(analysisId, 'extracting', 'Filtering pain points for relevance with AI...', 55);
+    const painPoints = await PainPointExtractor.aiFilterRelevantPainPoints(initialPainPoints, searchTerm);
+    console.log(`AI kept ${painPoints.length} relevant pain points`);
+
+    progressTracker.updateProgress(analysisId, 'extracting', `Identified ${painPoints.length} relevant pain points`, 60,
+      painPoints.length > 20 ? 'Rich complaint data found' : painPoints.length > 10 ? 'Moderate complaints found' : 'Few complaints detected');
 
     if (painPoints.length === 0) {
+      progressTracker.updateProgress(analysisId, 'complete', 'No relevant pain points detected in discussions', 100);
+      setTimeout(() => progressTracker.cleanup(analysisId), 30000);
       return NextResponse.json({
+        analysisId,
         categories: [],
         totalPainPoints: 0,
         searchTerm,
         analyzedAt: new Date(),
         topCategories: [],
-        message: 'No complaints or pain points found in the posts. The discussions might be mostly positive.',
+        message: 'No relevant complaints or pain points found in the posts. The discussions might be mostly positive or off-topic.',
       });
     }
 
     // Step 3: Filter by engagement (optional)
+    progressTracker.updateProgress(analysisId, 'filtering', 'Filtering by engagement quality...', 70);
     const filteredPainPoints = PainPointExtractor.filterByEngagement(painPoints, 2);
     console.log(`Filtered to ${filteredPainPoints.length} high-engagement pain points`);
+    
+    const finalPainPoints = filteredPainPoints.length > 0 ? filteredPainPoints : painPoints;
+    progressTracker.updateProgress(analysisId, 'filtering', `Analyzing ${finalPainPoints.length} high-quality pain points`, 75);
 
     // Step 4: AI categorization and analysis
-    const analysisResult = await geminiAnalyzer.categorizePainPoints(
-      filteredPainPoints.length > 0 ? filteredPainPoints : painPoints,
-      searchTerm
-    );
+    progressTracker.updateProgress(analysisId, 'categorizing', 'AI is categorizing and analyzing complaints...', 80);
+    const analysisResult = await geminiAnalyzer.categorizePainPoints(finalPainPoints, searchTerm);
 
+    progressTracker.updateProgress(analysisId, 'summarizing', 'Generating AI summaries for each category...', 90);
     console.log(`Analysis complete: ${analysisResult.categories.length} categories created`);
 
-    return NextResponse.json(analysisResult);
+    progressTracker.updateProgress(analysisId, 'complete', `Analysis complete! Found ${analysisResult.categories.length} pain point categories`, 100,
+      `${analysisResult.totalPainPoints} total complaints analyzed`);
+
+    // Clean up progress after a delay
+    setTimeout(() => progressTracker.cleanup(analysisId), 30000);
+
+    return NextResponse.json({
+      ...analysisResult,
+      analysisId
+    });
 
   } catch (error) {
     console.error('Analysis error:', error);

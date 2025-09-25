@@ -11,11 +11,16 @@ export default function Home() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [analysisId, setAnalysisId] = useState<string | null>(null);
 
   const handleAnalyze = async (searchTerm: string) => {
     setIsAnalyzing(true);
     setError(null);
     setAnalysisResult(null);
+    
+    // Generate analysis ID immediately for progress tracking
+    const newAnalysisId = Date.now().toString() + Math.random().toString(36).substring(2);
+    setAnalysisId(newAnalysisId);
 
     try {
       const response = await fetch('/api/analyze', {
@@ -23,7 +28,7 @@ export default function Home() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ searchTerm }),
+        body: JSON.stringify({ searchTerm, analysisId: newAnalysisId }),
       });
 
       const data = await response.json();
@@ -96,7 +101,7 @@ export default function Home() {
         )}
 
         {/* Loading State */}
-        {isAnalyzing && <LoadingSpinner />}
+        {isAnalyzing && <LoadingSpinner analysisId={analysisId || undefined} />}
 
         {/* Error State */}
         {error && (
